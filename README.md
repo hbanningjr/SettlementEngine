@@ -1,66 +1,108 @@
-## Foundry
+SettlementEngine
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+The conductor — a neutral coordinator that composes four upstream checks into one deterministic settlement decision.
 
-Foundry consists of:
+Why SettlementEngine?
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+Each layer in the identity stack answers one question. None of them knows whether settlement should proceed. That decision belongs to a separate layer — one that asks each specialist and composes their answers into a single, unambiguous result.
 
-## Documentation
+SettlementEngine is that layer.
 
-https://book.getfoundry.sh/
+It does not verify identity. It does not categorize wallets. It does not manage whitelists. It does not track asset lifecycles. It only asks four questions and returns one answer.
 
-## Usage
+Design Philosophy
 
-### Build
+A conductor does not play the instruments. It coordinates the musicians.
 
-```shell
-$ forge build
-```
+SettlementEngine follows three principles:
 
-### Test
+Fail closed. Any false answer, any revert, any inability to respond from any upstream layer returns false. Uncertainty is never interpreted as permission.
 
-```shell
-$ forge test
-```
+Neutral coordination. SettlementEngine contains no business logic. It composes facts established by specialists — it does not recreate them.
 
-### Format
+Separation of coordination and execution. canSettle() decides whether settlement is permitted. It does not execute the settlement. That boundary keeps the conductor swappable and its trust logic auditable.
 
-```shell
-$ forge fmt
-```
+Where SettlementEngine Fits
+text
+┌──────────────────────┐
+│ CivicPass │
+│ Who is this? │
+└──────────┬───────────┘
+│
+▼
+┌──────────────────────┐
+│ POKKET │
+│ Which wallet? │
+└──────────┬───────────┘
+│
+▼
+┌──────────────────────┐
+│ MINE │
+│ Authorized? │
+└──────────┬───────────┘
+│
+▼
+┌──────────────────────┐
+│ AssetRegistry │
+│ Asset still valid? │
+└──────────┬───────────┘
+│
+▼
+┌──────────────────────┐
+│ SettlementEngine │
+│ May we proceed? │
+└──────────┬───────────┘
+│
+▼
+true / false
+│
+▼
+Execution layer (future)
+The Decision Table
+CivicPass POKKET MINE AssetRegistry Result
+✓ ✓ ✓ ✓ true
+✗ ✓ ✓ ✓ false
+✓ ✗ ✓ ✓ false
+✓ ✓ ✗ ✓ false
+✓ ✓ ✓ ✗ false
+revert any any any false
+Public Interface
 
-### Gas Snapshots
+src/SettlementEngine.sol
 
-```shell
-$ forge snapshot
-```
+Function Description
+canSettle Returns true only when all four layers explicitly confirm
 
-### Anvil
+Parameters:
 
-```shell
-$ anvil
-```
+Parameter Type Purpose
+wallet address The wallet being checked across all layers
+electionId uint256 CivicPass credential context
+categoryToCheck IWalletRegistry.Category Required wallet category
+context bytes32 MINE authorization context
+assetId bytes32 Asset to verify eligibility
+Design Decisions
+All four upstream dependencies are immutable — trust relationships are fixed at deployment
+No Ownable — there are no privileged administrative operations
+try/catch wraps every external call — upstream reverts are caught and return false
+Early exit on first failure — if CivicPass fails, POKKET, MINE, and AssetRegistry are never called
+Coordination ends at return true — no transfers, no state mutations, no execution
+Testing
 
-### Deploy
+Built with Foundry using four configurable mock contracts — one per upstream dependency. Each mock supports independent control of return value and revert behavior, enabling exhaustive branch coverage.
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
+✓ 9 unit tests
+✓ 9 passing
+bash
+forge test -v
+Deployment
 
-### Cast
+Sepolia testnet — address coming soon.
 
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+The Full Stack
+Contract Question
+CivicPass Who is this?
+POKKET Which wallet?
+MINE Authorized?
+AssetRegistry Asset still valid?
+SettlementEngine May we proceed?
