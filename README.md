@@ -6,7 +6,7 @@
 
 ## Why SettlementEngine?
 
-Each layer in the identity stack answers one question. None of them knows whether settlement should proceed. That decision belongs to a separate layer — one that asks each specialist and composes their answers into a single, unambiguous result.
+Each specialist in the trust stack answers one question. None of them knows whether settlement should proceed. That decision belongs to a separate layer — one that asks each specialist and composes their answers into a single, unambiguous result.
 
 SettlementEngine is that layer.
 
