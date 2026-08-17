@@ -1,135 +1,108 @@
-# AssetRegistry
+SettlementEngine
 
-An on-chain lifecycle registry for tokenized real-world assets — tracking status, validity, and settlement eligibility.
+The conductor — a neutral coordinator that composes four upstream checks into one deterministic settlement decision.
 
----
+Why SettlementEngine?
 
-## Why AssetRegistry?
+Each layer in the identity stack answers one question. None of them knows whether settlement should proceed. That decision belongs to a separate layer — one that asks each specialist and composes their answers into a single, unambiguous result.
 
-Tokenizing a real-world asset proves it exists on-chain. It does not prove the underlying asset is still valid, active, or eligible for settlement today.
+SettlementEngine is that layer.
 
-AssetRegistry fills that gap. It maintains the lifecycle state of each registered asset and answers one question for the Settlement Engine:
+It does not verify identity. It does not categorize wallets. It does not manage whitelists. It does not track asset lifecycles. It only asks four questions and returns one answer.
 
-**"Is this asset currently eligible for settlement?"**
+Design Philosophy
 
----
+A conductor does not play the instruments. It coordinates the musicians.
 
-## Design Philosophy
+SettlementEngine follows three principles:
 
-AssetRegistry follows the principle of single responsibility.
+Fail closed. Any false answer, any revert, any inability to respond from any upstream layer returns false. Uncertainty is never interpreted as permission.
 
-It does not handle identity, wallet authorization, or settlement logic. It only tracks whether a registered asset binding is currently valid.
+Neutral coordination. SettlementEngine contains no business logic. It composes facts established by specialists — it does not recreate them.
 
-Other contracts can query this information without inheriting the complexity of asset lifecycle management.
+Separation of coordination and execution. canSettle() decides whether settlement is permitted. It does not execute the settlement. That boundary keeps the conductor swappable and its trust logic auditable.
 
----
-
-## Where AssetRegistry Fits
-
-```text
+Where SettlementEngine Fits
+text
 ┌──────────────────────┐
-│   CivicPass          │
-│   Who is this?       │
+│ CivicPass │
+│ Who is this? │
 └──────────┬───────────┘
-           │
-           ▼
+│
+▼
 ┌──────────────────────┐
-│   POKKET             │
-│   Which wallet?      │
+│ POKKET │
+│ Which wallet? │
 └──────────┬───────────┘
-           │
-           ▼
+│
+▼
 ┌──────────────────────┐
-│   MINE               │
-│   Authorized?        │
+│ MINE │
+│ Authorized? │
 └──────────┬───────────┘
-           │
-           ▼
+│
+▼
 ┌──────────────────────┐
-│   AssetRegistry      │
-│   Is the asset       │
-│   still valid?       │
+│ AssetRegistry │
+│ Asset still valid? │
 └──────────┬───────────┘
-           │
-           ▼
+│
+▼
 ┌──────────────────────┐
-│   Settlement Engine  │
-│   The Conductor      │
-└──────────────────────┘
-```
+│ SettlementEngine │
+│ May we proceed? │
+└──────────┬───────────┘
+│
+▼
+true / false
+│
+▼
+Execution layer (future)
+The Decision Table
+CivicPass POKKET MINE AssetRegistry Result
+✓ ✓ ✓ ✓ true
+✗ ✓ ✓ ✓ false
+✓ ✗ ✓ ✓ false
+✓ ✓ ✗ ✓ false
+✓ ✓ ✓ ✗ false
+revert any any any false
+Public Interface
 
----
+src/SettlementEngine.sol
 
-## Asset Lifecycle
+Function Description
+canSettle Returns true only when all four layers explicitly confirm
 
-```text
-Unregistered
-    ↓
-registerAsset()
-    ↓
-Active ◄──────────────────┐
-    ↓                      │
-suspendAsset()        reactivateAsset()
-    ↓                      │
-Suspended ─────────────────┘
-    ↓
-revokeAsset() ──► Revoked (terminal)
+Parameters:
 
-Active/Suspended
-    ↓
-block.timestamp > validUntil ──► Expired (automatic)
-```
+Parameter Type Purpose
+wallet address The wallet being checked across all layers
+electionId uint256 CivicPass credential context
+categoryToCheck IWalletRegistry.Category Required wallet category
+context bytes32 MINE authorization context
+assetId bytes32 Asset to verify eligibility
+Design Decisions
+All four upstream dependencies are immutable — trust relationships are fixed at deployment
+No Ownable — there are no privileged administrative operations
+try/catch wraps every external call — upstream reverts are caught and return false
+Early exit on first failure — if CivicPass fails, POKKET, MINE, and AssetRegistry are never called
+Coordination ends at return true — no transfers, no state mutations, no execution
+Testing
 
----
+Built with Foundry using four configurable mock contracts — one per upstream dependency. Each mock supports independent control of return value and revert behavior, enabling exhaustive branch coverage.
 
-## Public Interface
-
-`src/AssetRegistry.sol`
-
-| Function | Description |
-|---|---|
-| `registerAsset` | Register a new asset with label and validity window |
-| `suspendAsset` | Temporarily suspend an active asset |
-| `reactivateAsset` | Restore a suspended asset to active |
-| `revokeAsset` | Permanently revoke an asset (terminal) |
-| `getAssetInfo` | Retrieve full asset record |
-| `isEligible` | Settlement-facing eligibility check |
-
----
-
-## Design Decisions
-
-- `isEligible()` requires `exists && Active && block.timestamp < validUntil` — all three must pass
-- Suspension is reversible; revocation is terminal
-- Expiry is automatic — no transaction needed, time alone determines ineligibility
-- Revocation is permitted after expiry to preserve audit history
-- The `exists` flag prevents unregistered assets from appearing valid via Solidity mapping defaults
-
----
-
-## Testing
-
-Built with Foundry using a comprehensive unit test suite covering the full asset lifecycle, all state transitions, time-based expiry, boundary conditions, and integration flows.
-
-```
-✓ 31 unit tests
-✓ 31 passing
-```
-
-```bash
+✓ 9 unit tests
+✓ 9 passing
+bash
 forge test -v
-```
-
----
-
-## Deployment
+Deployment
 
 Sepolia testnet — address coming soon.
 
----
-
-## Related Projects
-
-- [CivicPass](https://github.com/hbanningjr/civicpass) — Privacy-preserving credential verification
-- [POKKET](https://github.com/hbanningjr/POKKET) — On-chain wallet categorization
-- [MINE](https://github.com/hbanningjr/MINE) — Decentralized authorization layer
+The Full Stack
+Contract Question
+CivicPass Who is this?
+POKKET Which wallet?
+MINE Authorized?
+AssetRegistry Asset still valid?
+SettlementEngine May we proceed?
